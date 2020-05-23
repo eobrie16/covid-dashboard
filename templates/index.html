@@ -20,14 +20,14 @@
         </div>
     </div>
     <div class="row mt-5">
+        {{ div_us_map | safe }}
+    </div>
+    <div class="row mt-5">
         {{ div_death_chart | safe }}
     </div>
-    <!-- <div class="row mt-5">
-        {{ div_hist_age | safe }}
-    </div> -->
 </div>
 
 {{ script_cases_chart | safe }}
+{{ script_us_map | safe }}
 {{ script_death_chart | safe }}
-<!-- {{ script_hist_age | safe }} -->
 {% endblock %}
