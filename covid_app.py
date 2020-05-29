@@ -2,6 +2,7 @@ import math
 import numpy as np
 import pandas as pd
 import json
+import us
 
 from bokeh.embed import components
 from bokeh.models import ColumnDataSource, HoverTool, PrintfTickFormatter
@@ -12,8 +13,9 @@ from bokeh.palettes import brewer
 
 from flask import Flask, render_template, request
 
-from covid_data import get_data
+from covid_data import get_data, get_state
 
+STATES = [state.abbr for state in us.states.STATES]
 
 palette = ['#ba32a0', '#f85479', '#f8c260', '#00c2ba']
 
@@ -57,41 +59,42 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
 def chart():
-    selected_class = request.form.get('dropdown-select')
+    selected_stat = request.form.get('dropdown-select')
+    if not selected_stat:
+        selected_stat = 'total'
+    selected_state = request.form.get('state-select')
+    if not selected_state:
+        selected_state = 'MI'
 
-    if selected_class == 0 or selected_class == None:
-        cases_chart, death_chart, us_map = redraw('total')
-    else:
-        cases_chart, death_chart, us_map = redraw(selected_class)
-
-    script_cases_chart, div_cases_chart = components(cases_chart)
-    script_death_chart, div_death_chart = components(death_chart)
-    script_us_map, div_us_map = components(us_map)
+    graphs = redraw(selected_stat, selected_state)
+        
+    scripts = []
+    divs = []
+    for graph in graphs:
+        script, div = components(graph)
+        scripts.append(script)
+        divs.append(div)
 
     return render_template(
         'index.html',
-        div_cases_chart=div_cases_chart,
-        script_cases_chart=script_cases_chart,
-        div_death_chart=div_death_chart,
-        script_death_chart=script_death_chart,
-        div_us_map=div_us_map,
-        script_us_map=script_us_map,
-        selected_class=selected_class
+        states=STATES,
+        scripts=scripts,
+        divs=divs
     )
 
 def process_data(dataset, type, depend, count=None):
     factor = 1
-    if type == 'capita':
-        type_str = f'pc_{depend}'
-        title = f"{depend.capitalize()} Per 100,000 residents"
+    if type == 'pc':
+        type_str = f'{depend}'
+        title = f"{depend[3:].capitalize()} Per 100,000 residents"
         factor = 1e5
     elif type == 'percent':
-        type_str = f'percent_{depend}'
-        title = f"Percentage of {depend.capitalize()}"
+        type_str = f'{depend}'
+        title = f"Percentage of {depend.split('_')[-1].title()}"
         factor = 100
     elif type == 'total':
         type_str = depend
-        title = f"Total {depend.capitalize()}"
+        title = f"{depend.capitalize().replace('_', ' ')}"
     else:
         type_str = depend
         title = depend.title()
@@ -101,12 +104,13 @@ def process_data(dataset, type, depend, count=None):
         the_data = dataset[dataset[type_str] > cutoff]
     else:
         the_data = dataset
+    the_data = the_data.drop(columns='date')
     the_data['values'] = factor*the_data[type_str]
 
     return the_data, title
 
 def bar_chart(dataset, type, depend, cpalette=palette, count=15):
-    the_data, title = process_data(dataset, type, depend, count)
+    the_data, title = process_data(dataset, type, type+"_"+depend, count)
         
     values = list(the_data['values'])
     states = list(the_data['state'])
@@ -121,20 +125,45 @@ def bar_chart(dataset, type, depend, cpalette=palette, count=15):
     )
     
     p = figure(x_range=states, tools=[hover_tool], plot_height=400, title=title)
-    
     p.vbar(x='states', top='values', source=source, width=0.9,
            fill_color=factor_cmap('states', palette=palette_generator(len(source.data['states']), cpalette), factors=source.data['states']))
     
-    
     plot_styler(p)
-    # p.xaxis.ticker = source.data['states']
-    # p.xaxis.major_label_overrides = dataset['states'].values
+    p.sizing_mode = 'scale_width'
+    
+    return p
+
+def line_chart(dataset, state, type, depend, cpalette=palette, count=15):
+    if type == 'pc':
+        title = str(us.states.lookup(state)) + " {} Per 100,000 residents".format(depend.title())
+    else:
+        title = str(us.states.lookup(state)) + " {} {}".format(type.title(), depend.title())
+        
+    source = ColumnDataSource(data={
+        'date': dataset['date'],
+        'cases': dataset[type + '_case_' + depend],
+        'deaths': dataset[type + '_death_' + depend],
+        'state': dataset['state']
+    })
+
+    hover_tool = HoverTool(
+        tooltips=[('State', '@state'), ('Cases', '@cases'), ('Deaths', '@deaths')]
+    )
+    
+    p = figure(plot_width=800, plot_height=600, tools=[hover_tool], x_axis_type="datetime", title=title)
+    p.grid.grid_line_alpha=0
+    # p.yaxis.axis_label = 'Cases'
+    p.line('date', 'cases', source=source, line_width=2, color='navy', legend_label='Cases')
+    p.line('date', 'deaths', source=source, line_width=2, color='red', legend_label='Deaths')
+    p.legend.location = "top_left"
+
+    plot_styler(p)
     p.sizing_mode = 'scale_width'
     
     return p
 
 def create_map(dataset, type, depend, cpalette=palette):
-    the_data, title = process_data(dataset, type, depend)
+    the_data, title = process_data(dataset, type, type+"_"+depend)
 
     #Read data to json.
     merged_json = json.loads(the_data.to_json())
@@ -166,16 +195,16 @@ def create_map(dataset, type, depend, cpalette=palette):
     
     return p
 
-def redraw(p_class):
+def redraw(stat_type, state):
     dataset = get_data()
-    cases_chart = bar_chart(dataset, p_class, 'cases')
-    death_chart = bar_chart(dataset, p_class, 'death')
-    us_map = create_map(dataset, p_class, 'cases')
-    return (
-        cases_chart,
-        death_chart,
-        us_map
-    )
+    state_data = get_state(state, 4)
+    charts = []
+    for _type in ['cases', 'death', 'tests']:
+        charts.append(bar_chart(dataset, stat_type, _type))
+    charts.append(line_chart(state_data, state, stat_type, 'increase'))
+    charts.append(create_map(dataset, stat_type, 'cases'))
+    
+    return charts
 
 
 if __name__ == '__main__':

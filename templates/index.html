@@ -3,31 +3,41 @@
 {% include 'navbar.html' %}
 <div class="container">
     <div class="row mt-5">
+        {{ divs[4] | safe }}
+    </div>
+    <div class="row mt-5">
+        <form name="state-form" action="" method="POST">
+            <select class="my-state-menu" name="state-select" style="padding:8px;border-radius:8px;">
+                {% for state in states %}
+                    <option value="{{state}}" {% if selected_state=='{{state}}' %} selected {% endif %}>{{state}}</option>
+                {% endfor %}
+            </select>
+            <button class="submit-btn" type="submit">Apply</button>
+        </form>
+    </div>
+    <div class="row mt-5">
         <div class="col-6">
-            <p>Lorem ipsum dolor sit, amet consectetur adipisicing elit. Corporis provident ducimus incidunt dicta
-                aliquam nesciunt quod laudantium tempore iusto ab veritatis, aperiam iste aspernatur quisquam
-                consequuntur, accusamus ipsam magni perferendis ullam recusandae inventore? Cupiditate fugit recusandae
-                reiciendis libero placeat esse saepe suscipit, sit eveniet ratione natus totam similique distinctio quas
-                repudiandae ipsa excepturi sunt est nam molestias quibusdam dicta ab. Maiores provident reiciendis non
-                porro ipsam vitae amet quas temporibus, molestiae odit laborum debitis voluptas quisquam esse ullam
-                incidunt repellat ipsa quae sunt explicabo a? Perferendis, reprehenderit ab aspernatur id voluptatem
-                explicabo cum reiciendis. Facere ipsam expedita, autem neque temporibus sequi impedit a ut nihil
-                architecto! Numquam, excepturi autem omnis explicabo sint natus quibusdam, voluptatum molestias non
-                dolor, porro ab.</p>
+            {{ divs[1] | safe }}
         </div>
         <div class="col-6">
-            {{ div_cases_chart | safe }}
+            {{ divs[0] | safe }}
         </div>
     </div>
     <div class="row mt-5">
-        {{ div_us_map | safe }}
-    </div>
-    <div class="row mt-5">
-        {{ div_death_chart | safe }}
+        <div class="col-6">
+            {{ divs[2] | safe }}
+        </div>
+        <div class="col-6">
+            {{ divs[3] | safe }}
+        </div>
     </div>
 </div>
 
-{{ script_cases_chart | safe }}
-{{ script_us_map | safe }}
+{% for script in scripts %}
+    {{ script | safe }}
+<!-- {{ script_us_map | safe }}
 {{ script_death_chart | safe }}
+{{ script_cases_line | safe }}
+{{ script_death_line | safe }} -->
+{% endfor %}
 {% endblock %}
